@@ -16,6 +16,8 @@ import java.util.*;
 public class ReportManager {
     private final LegacyDatabase database = LegacyDatabase.getInstance();
     private final NotificationService notificationService = new NotificationService();
+    private final ReportCsvFormatter csvFormatter = new ReportCsvFormatter();
+    private final ExecutiveSummaryHtmlFormatter htmlFormatter = new ExecutiveSummaryHtmlFormatter();
 
     public double calculateTotalRevenue() {
         double total = 0.0;
@@ -82,38 +84,16 @@ public class ReportManager {
         return categoryRevenue;
     }
 
-    // --- CSV Report Generation (SRP Violation) ---
     public String exportSalesReportToCsv() {
-        StringBuilder csv = new StringBuilder();
-        csv.append("Order ID,User ID,Status,Subtotal,Discount,Tax,Shipping,Total,Created At\n");
-        for (Order o : database.getOrders().values()) {
-            csv.append(o.getId()).append(",")
-               .append(o.getUserId()).append(",")
-               .append(o.getStatus()).append(",")
-               .append(String.format("%.2f", o.getSubtotal())).append(",")
-               .append(String.format("%.2f", o.getDiscountAmount())).append(",")
-               .append(String.format("%.2f", o.getTaxAmount())).append(",")
-               .append(String.format("%.2f", o.getShippingCost())).append(",")
-               .append(String.format("%.2f", o.getTotalAmount())).append(",")
-               .append(o.getCreatedAt()).append("\n");
-        }
-        return csv.toString();
+        return csvFormatter.format(database.getOrders().values());
     }
 
-    // --- HTML Report Generation & Emailing (SRP Violation) ---
     public String generateExecutiveSummaryHtml() {
-        StringBuilder html = new StringBuilder();
-        html.append("<html><body>");
-        html.append("<h1>Enterprise E-Commerce Executive Sales Summary</h1>");
-        html.append("<p>Total Orders: ").append(getTotalOrdersCount()).append("</p>");
-        html.append("<p>Cancelled Orders: ").append(getCancelledOrdersCount()).append("</p>");
-        html.append("<p>Total Net Revenue: $").append(String.format("%.2f", calculateTotalRevenue())).append("</p>");
-        html.append("<h2>Category Breakdown</h2><ul>");
-        for (Map.Entry<String, Double> entry : getRevenueByCategory().entrySet()) {
-            html.append("<li>").append(entry.getKey()).append(": $").append(String.format("%.2f", entry.getValue())).append("</li>");
-        }
-        html.append("</ul></body></html>");
-        return html.toString();
+        return htmlFormatter.format(
+                getTotalOrdersCount(),
+                getCancelledOrdersCount(),
+                calculateTotalRevenue(),
+                getRevenueByCategory());
     }
 
     public void emailDailySalesReportToAdmin(String adminEmail) {

@@ -4,8 +4,6 @@ import com.legacy.ecommerce.data.LegacyDatabase;
 import com.legacy.ecommerce.model.CustomerTier;
 import com.legacy.ecommerce.model.User;
 
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.util.*;
 
@@ -16,30 +14,14 @@ import java.util.*;
  */
 public class UserManager {
     private final LegacyDatabase database = LegacyDatabase.getInstance();
+    private final UserValidator userValidator = new UserValidator();
+    private final PasswordHasher passwordHasher = new PasswordHasher();
+    private final UserCsvExporter userCsvExporter = new UserCsvExporter();
     // Direct dependency instantiation (Tight coupling)
     private final NotificationService notificationService = new NotificationService();
 
     public User registerUser(String name, String email, String password, String address, String phoneNumber) {
-        // Validation logic
-        if (name == null || name.trim().isEmpty()) {
-            throw new IllegalArgumentException("User name cannot be empty.");
-        }
-        if (email == null || !email.contains("@") || !email.contains(".")) {
-            throw new IllegalArgumentException("Invalid email format.");
-        }
-        if (password == null || password.length() < 6) {
-            throw new IllegalArgumentException("Password must be at least 6 characters long.");
-        }
-        boolean hasDigit = false;
-        for (char c : password.toCharArray()) {
-            if (Character.isDigit(c)) {
-                hasDigit = true;
-                break;
-            }
-        }
-        if (!hasDigit) {
-            throw new IllegalArgumentException("Password must contain at least one digit.");
-        }
+        userValidator.validateRegistration(name, email, password);
 
         // Uniqueness check
         for (User existingUser : database.getUsers().values()) {
@@ -48,8 +30,7 @@ public class UserManager {
             }
         }
 
-        // Mock password hashing (Base64)
-        String hashedPassword = Base64.getEncoder().encodeToString(password.getBytes());
+        String hashedPassword = passwordHasher.hash(password);
 
         String userId = "USR-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         User newUser = new User(userId, name.trim(), email.trim(), hashedPassword, address, phoneNumber);
@@ -70,9 +51,8 @@ public class UserManager {
         if (email == null || password == null) {
             return null;
         }
-        String hashedInput = Base64.getEncoder().encodeToString(password.getBytes());
         for (User user : database.getUsers().values()) {
-            if (user.getEmail().equalsIgnoreCase(email) && user.getPassword().equals(hashedInput)) {
+            if (user.getEmail().equalsIgnoreCase(email) && passwordHasher.matches(password, user.getPassword())) {
                 if (!user.isActive()) {
                     throw new IllegalStateException("User account is deactivated.");
                 }
@@ -131,26 +111,12 @@ public class UserManager {
         }
     }
 
-    // --- File operations & CSV Export embedded directly in UserManager (SRP Violation) ---
-
     public String exportUsersToCsv() {
-        StringBuilder csv = new StringBuilder();
-        csv.append("ID,Name,Email,Tier,LoyaltyPoints,Active\n");
-        for (User user : database.getUsers().values()) {
-            csv.append(user.toCsvRow()).append("\n");
-        }
-        return csv.toString();
+        return userCsvExporter.exportUsersToCsv(getAllUsers());
     }
 
     public void exportUsersToFile(String filePath) throws IOException {
-        String csvContent = exportUsersToCsv();
-        File file = new File(filePath);
-        if (file.getParentFile() != null) {
-            file.getParentFile().mkdirs();
-        }
-        try (FileWriter writer = new FileWriter(file)) {
-            writer.write(csvContent);
-        }
+        userCsvExporter.exportUsersToFile(getAllUsers(), filePath);
     }
 
     public List<User> getAllUsers() {
